@@ -204,8 +204,19 @@ class ExifTool(object):
         self.process.stdin.flush()
         output = ""
         fd = self.process.stdout.fileno()
+        leftover = b''                                            # The last un-decoded bytes of the previous segment
         while not output.rstrip(' \t\n\r').endswith(self.sentinel):
             increment = os.read(fd, 4096)
+            if leftover:
+                increment = leftover + increment                    # bytes concatenation
+                leftover = b''
+            try:
+                exif_text = increment.decode('utf-8')
+            except UnicodeDecodeError as e:
+                err_pos = e.start
+                if err_pos > 0:
+                    exif_text = increment[:err_pos].decode('utf-8') # The normal decoding part
+                    leftover = increment[err_pos:]                  # The errors decoding part (Concatenate to the next segment)
             if self.verbose:
                 sys.stdout.write(increment.decode('utf-8'))
             output += increment.decode('utf-8')
